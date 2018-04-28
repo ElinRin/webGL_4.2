@@ -6,61 +6,6 @@
 
 <script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
 <script type="text/javascript" src="webgl-utils.js"></script>
-    <script id="sphereVertexShader" type="x-shader/x-vertex">
-uniform mat4 uPMatrix;
-uniform vec3 lightWorldPos;
-uniform mat4 world;
-uniform mat4 viewInverse;
-uniform mat4 worldInverseTranspose;
-attribute vec4 position;
-attribute vec3 normal;
-attribute vec2 texCoord;
-varying vec4 aVertexPosition;
-varying vec2 aTextureCoord;
-varying vec3 aVertexNormal;
-varying vec3 v_surfaceToLight;
-varying vec3 v_surfaceToView;
-void main() {
-  aTextureCoord = texCoord;
-  aVertexPosition = (uPMatrix * position);
-  aVertexNormal = (worldInverseTranspose * vec4(normal, 0)).xyz;
-  v_surfaceToLight = lightWorldPos - (world * position).xyz;
-  v_surfaceToView = (viewInverse[3] - (world * position)).xyz;
-  gl_Position = aVertexPosition;
-}
-
-</script>
-<script id="sphereFragmentShader"  type="x-shader/x-fragment">
-
-precision mediump float;
-
-uniform vec4 lightWeighting;
-varying vec4 aVertexPosition;
-varying vec2 aTextureCoord;
-varying vec3 aVertexNormal;
-varying vec3 v_surfaceToLight;
-varying vec3 v_surfaceToView;
-
-uniform sampler2D uSampler;
-
-vec4 lit(float l ,float h, float m) {
-  return vec4(1.0,
-              max(l, 0.0),
-              (l > 0.0) ? pow(max(0.0, h), m) : 0.0,
-              1.0);
-}
-void main() {
-  vec3 normal = normalize(aVertexNormal);
-  vec3 surfaceToLight = normalize(v_surfaceToLight);
-  vec3 surfaceToView = normalize(v_surfaceToView);
-  vec3 halfVector = normalize(surfaceToLight + surfaceToView);
-  vec4 litR = lit(dot(normal, surfaceToLight),
-                  dot(normal, halfVector), 1.0);
-        
-  gl_FragColor = vec4((lightWeighting * texture2D(uSampler, vec2(litR.y, 0.5))).rgb, 1);\
-}
-</script>
-
 
 <script id="per-fragment-lighting-fs" type="x-shader/x-fragment">
     precision mediump float;
@@ -84,6 +29,13 @@ void main() {
     uniform sampler2D uSampler;
 
 
+    vec4 lit(float l ,float h, float m) {
+      return vec4(1.0,
+                  max(l, 0.0),
+                  (l > 0.0) ? pow(max(0.0, h), m) : 0.0,
+                  1.0);
+    }
+
     void main(void) {
         vec3 lightWeighting;
         if (!uUseLighting) {
@@ -106,12 +58,20 @@ void main() {
                 + uPointLightingDiffuseColor * diffuseLightWeighting;
         }
 
+        vec3 normal = normalize(vTransformedNormal);
+        vec3 surfaceToLight = normalize(uPointLightingLocation - vPosition.xyz);
+        vec3 halfVector = normalize(-vPosition.xyz);
+
+        vec4 litR = lit(dot(normal, surfaceToLight),
+                  dot(normal, halfVector), 0.0);
+
         vec4 fragmentColor;
         if (uUseTextures) {
             fragmentColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
         } else {
-            fragmentColor = vec4(1.0, 1.0, 1.0, 1.0);
+            fragmentColor = texture2D(uSampler, vec2(litR.y, 0));
         }
+
         gl_FragColor = vec4(fragmentColor.rgb * lightWeighting, fragmentColor.a);
     }
 </script>
@@ -219,8 +179,8 @@ void main() {
     let shaderProgram;
 
     function initShaders() {
-        var fragmentShader = getShader(gl, "sphereFragmentShader");
-        var vertexShader = getShader(gl, "sphereVertexShader");
+        var fragmentShader = getShader(gl, "per-fragment-lighting-fs");
+        var vertexShader = getShader(gl, "per-fragment-lighting-vs");
 
         shaderProgram = gl.createProgram();
         gl.attachShader(shaderProgram, vertexShader);
@@ -562,7 +522,7 @@ void main() {
 
     Texture:
     <select id="texture">
-        <option value="none">None</option>
+        <option value="none">Toon Shading</option>
         <option selected value="space">Space</option>
     </select>
     <br/>
